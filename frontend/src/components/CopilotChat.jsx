@@ -1,16 +1,33 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bot, Send, AlertTriangle, AlertCircle, Loader2, Sparkles, ShieldAlert } from 'lucide-react';
+import {
+  Bot,
+  Send,
+  AlertCircle,
+  Loader2,
+  Sparkles,
+  ShieldAlert,
+  RotateCcw,
+  PhoneCall,
+  ExternalLink,
+  Key
+} from 'lucide-react';
 import { sendCopilotMessage } from '../services/api';
 import { getTranslation } from '../utils/translations';
 
-export default function CopilotChat({ lang = 'en', user }) {
+export default function CopilotChat({
+  lang = 'en',
+  user,
+  onOpenEmergencyModal,
+  onOpenLogModal,
+  onSelectTab
+}) {
   const t = (key, fallback) => getTranslation(lang, key, fallback);
 
   const initialWelcomeText = (lang === 'te')
     ? "నమస్కారం! నేను మీ హెల్త్ సాథి AI సహాయకుడిని. మీ ఆరోగ్యం, లక్షణాలు, లేదా ఆహారపు అలవాట్లపై నేను మీకు ఎలా సహాయపడగలను?"
     : (lang === 'hi')
     ? "नमस्ते! मैं आपका हेल्थ साथी AI सहायक हूँ। आपके स्वास्थ्य, लक्षण, या दिनचर्या के बारे में मैं आपकी क्या मदद कर सकता हूँ?"
-    : "Hello! I am your HealthSaathi AI Copilot. I've synced your latest resting vitals. What symptoms, medications, or wellness questions can I assist you with right now?";
+    : "Hello! I am your HealthSaathi Clinical Copilot. I can assist you with understanding symptoms, biomarker interpretations, visit preparation, and general health education. How can I help you today?";
 
   const [messages, setMessages] = useState([
     {
@@ -24,6 +41,7 @@ export default function CopilotChat({ lang = 'en', user }) {
   ]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [lastQuery, setLastQuery] = useState('');
   const messagesEndRef = useRef(null);
 
   const quickPrompts = [
@@ -55,9 +73,17 @@ export default function CopilotChat({ lang = 'en', user }) {
     setMessages((prev) => [...prev, userMessage]);
     setInputText('');
     setIsLoading(true);
+    setLastQuery(query);
 
     try {
-      const response = await sendCopilotMessage(query, lang, user?.id);
+      // Build safe conversation history (last 4 messages, text only, no raw PII)
+      const recentHistory = messages.slice(-4).map((m) => ({
+        sender: m.sender,
+        text: m.text
+      }));
+
+      const response = await sendCopilotMessage(query, lang, user?.id || 'guest_patient', recentHistory);
+
       const botReply = {
         id: Date.now() + 1,
         sender: 'copilot',
@@ -67,6 +93,8 @@ export default function CopilotChat({ lang = 'en', user }) {
         disclaimer: response.disclaimer,
         is_emergency: response.is_emergency,
         provider: response.provider,
+        config_notice: response.config_notice,
+        error_message: response.error_message,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
       setMessages((prev) => [...prev, botReply]);
@@ -80,13 +108,49 @@ export default function CopilotChat({ lang = 'en', user }) {
             ? "సర్వర్ తో కనెక్ట్ కావడంలో అంతరాయం ఏర్పడింది. దయచేసి స్థానిక మార్గదర్శకాలను పాటించండి."
             : (lang === 'hi')
             ? "सर्वर से जुड़ने में समस्या आई है। कृपया कुछ समय बाद पुनः प्रयास करें।"
-            : "I experienced a temporary network delay contacting the AI engine, but your health data remains protected in your local database.",
+            : "I experienced a network delay contacting the AI backend. Please verify your connection or retry.",
+          error_message: err.message,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }
       ]);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleActionClick = (act) => {
+    const lower = (act || '').toLowerCase();
+    if (lower.includes('vital') || lower.includes('reading') || lower.includes('log new')) {
+      if (onOpenLogModal) {
+        onOpenLogModal();
+        return;
+      }
+    }
+    if (lower.includes('symptom')) {
+      if (onSelectTab) {
+        onSelectTab('symptoms');
+        return;
+      }
+    }
+    if (lower.includes('doctor') || lower.includes('visit') || lower.includes('prep') || lower.includes('appointment')) {
+      if (onSelectTab) {
+        onSelectTab('appointments');
+        return;
+      }
+    }
+    if (lower.includes('medicine') || lower.includes('prescription')) {
+      if (onSelectTab) {
+        onSelectTab('prescriptions');
+        return;
+      }
+    }
+    if (lower.includes('emergency') || lower.includes('112') || lower.includes('108')) {
+      if (onOpenEmergencyModal) {
+        onOpenEmergencyModal();
+        return;
+      }
+    }
+    handleSend(act);
   };
 
   const handleKeyDown = (e) => {
@@ -98,6 +162,7 @@ export default function CopilotChat({ lang = 'en', user }) {
 
   return (
     <aside className="copilot-panel" aria-label="AI Health Copilot Assistant" id="copilot-chat-container">
+      {/* Header */}
       <div className="copilot-panel-header">
         <div className="copilot-title-box">
           <div className="copilot-avatar-glow">
@@ -108,22 +173,88 @@ export default function CopilotChat({ lang = 'en', user }) {
             <p>{t('copilot_status', 'Active • Clinical Guidance Engine')}</p>
           </div>
         </div>
-        <span className="brand-badge">{t('copilot_badge', 'FastAPI + Gemini AI')}</span>
+        <span className="brand-badge" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <Sparkles size={11} />
+          <span>OpenAI API</span>
+        </span>
       </div>
 
+      {/* Messages Scroll Area */}
       <div className="copilot-messages" id="chat-messages-scroll-area">
         {messages.map((msg) => (
           <div key={msg.id} className={`message-row ${msg.sender}`}>
-            <div className="message-bubble" style={msg.is_emergency ? { borderColor: '#f43f5e', background: 'rgba(244,63,94,0.1)' } : {}}>
+            <div
+              className="message-bubble"
+              style={
+                msg.is_emergency
+                  ? { borderColor: '#f43f5e', background: 'rgba(244, 63, 94, 0.12)' }
+                  : {}
+              }
+            >
+              {/* Emergency Banner */}
               {msg.is_emergency && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#f87171', fontWeight: 700, fontSize: '0.82rem', marginBottom: '6px' }}>
-                  <ShieldAlert size={16} />
-                  <span>URGENT EMERGENCY ALERT</span>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '0.45rem 0.65rem',
+                    borderRadius: '8px',
+                    background: 'rgba(244, 63, 94, 0.25)',
+                    border: '1px solid #f43f5e',
+                    marginBottom: '8px'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#fca5a5', fontWeight: 700, fontSize: '0.82rem' }}>
+                    <ShieldAlert size={16} />
+                    <span>URGENT EMERGENCY ALERT</span>
+                  </div>
+                  {onOpenEmergencyModal && (
+                    <button
+                      onClick={onOpenEmergencyModal}
+                      className="btn-primary"
+                      style={{
+                        padding: '0.25rem 0.6rem',
+                        fontSize: '0.72rem',
+                        background: '#e11d48',
+                        borderColor: '#f43f5e'
+                      }}
+                    >
+                      <PhoneCall size={12} />
+                      <span>Call 112</span>
+                    </button>
+                  )}
                 </div>
               )}
 
+              {/* Configuration Notice if API key missing */}
+              {msg.config_notice && (
+                <div
+                  style={{
+                    marginBottom: '8px',
+                    padding: '0.5rem 0.75rem',
+                    borderRadius: '8px',
+                    background: 'rgba(245, 158, 11, 0.12)',
+                    border: '1px solid rgba(245, 158, 11, 0.35)',
+                    fontSize: '0.76rem',
+                    color: '#fde68a',
+                    display: 'flex',
+                    gap: '6px',
+                    alignItems: 'flex-start'
+                  }}
+                >
+                  <Key size={14} style={{ flexShrink: 0, marginTop: '2px' }} />
+                  <div>
+                    <strong>Configuration Tip: </strong>
+                    To connect live OpenAI intelligence, add <code>OPENAI_API_KEY=sk-...</code> into <code>backend/.env</code> and restart the server. (Currently responding via verified clinical safety triage).
+                  </div>
+                </div>
+              )}
+
+              {/* Message Content */}
               <p style={{ whiteSpace: 'pre-line' }}>{msg.text}</p>
 
+              {/* Suggested Actions */}
               {msg.suggested_actions && msg.suggested_actions.length > 0 && (
                 <div className="suggested-actions-box">
                   <div className="action-pill-title">Recommended Next Steps:</div>
@@ -133,7 +264,7 @@ export default function CopilotChat({ lang = 'en', user }) {
                         key={idx}
                         className="action-pill"
                         style={msg.is_emergency ? { borderColor: 'rgba(244,63,94,0.5)', color: '#fca5a5' } : {}}
-                        onClick={() => handleSend(act)}
+                        onClick={() => handleActionClick(act)}
                       >
                         {act}
                       </span>
@@ -142,6 +273,7 @@ export default function CopilotChat({ lang = 'en', user }) {
                 </div>
               )}
 
+              {/* Disclaimer */}
               {msg.disclaimer && (
                 <div className="disclaimer-text">
                   <AlertCircle size={10} style={{ display: 'inline', marginRight: '3px', verticalAlign: 'middle' }} />
@@ -149,11 +281,35 @@ export default function CopilotChat({ lang = 'en', user }) {
                 </div>
               )}
 
-              <div className="message-time">{msg.timestamp}</div>
+              {/* Footer with Timestamp and Retry Option */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '6px' }}>
+                <div className="message-time">{msg.timestamp}</div>
+                {msg.sender === 'copilot' && msg.id !== 1 && (
+                  <button
+                    type="button"
+                    onClick={() => handleSend(lastQuery)}
+                    title="Retry this request"
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#64748b',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '3px',
+                      fontSize: '0.7rem'
+                    }}
+                  >
+                    <RotateCcw size={11} />
+                    <span>Retry</span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         ))}
 
+        {/* Loading Indicator */}
         {isLoading && (
           <div className="message-row copilot">
             <div className="message-bubble" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -181,7 +337,7 @@ export default function CopilotChat({ lang = 'en', user }) {
         ))}
       </div>
 
-      {/* Input Field */}
+      {/* Input Form */}
       <form
         className="copilot-input-form"
         onSubmit={(e) => {

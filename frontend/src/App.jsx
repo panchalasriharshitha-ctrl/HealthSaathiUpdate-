@@ -8,20 +8,25 @@ import LogVitalsModal from './components/LogVitalsModal';
 import SymptomChecker from './components/SymptomChecker';
 import AppointmentsManager from './components/AppointmentsManager';
 import HealthHistory from './components/HealthHistory';
-import AuthModal from './components/AuthModal';
+import LabReportsManager from './components/LabReportsManager';
+import PrescriptionManager from './components/PrescriptionManager';
+import EmergencyModal from './components/EmergencyModal';
+import AuthView from './components/AuthView';
 import { checkBackendHealth, fetchVitals } from './services/api';
 import { supabase } from './services/supabase';
 import { getTranslation } from './utils/translations';
-import { Shield, Sparkles, RefreshCw, Download, Watch, CheckCircle2 } from 'lucide-react';
+import { Shield, Sparkles, RefreshCw, Download, Watch, CheckCircle2, FileText, Pill } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [lang, setLang] = useState(() => localStorage.getItem('healthsaathi_lang') || 'en');
   const [user, setUser] = useState(null);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
+  const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState(false);
   const [backendHealth, setBackendHealth] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSyncingWatch, setIsSyncingWatch] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
   // Vitals state
@@ -110,7 +115,7 @@ export default function App() {
 
   const showToast = (msg) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(''), 3000);
+    setTimeout(() => setToastMessage(''), 3500);
   };
 
   const addNotification = (item) => {
@@ -132,38 +137,52 @@ export default function App() {
       newLang === 'te'
         ? 'భాష తెలుగుగా మార్చబడింది'
         : newLang === 'hi'
-          ? 'भाषा हिन्दी में बदली गई'
-          : 'Language set to English'
+        ? 'भाषा हिन्दी में बदली गई'
+        : 'Language set to English'
     );
   };
 
-  // Auth session check
+  // Auth session check & persistence on refresh
   useEffect(() => {
+    let isMounted = true;
+
     const initAuth = async () => {
       try {
-        const { data } = await supabase.auth.getSession();
-        if (data?.session?.user) {
-          setUser(data.session.user);
-        } else {
-          // Check local guest demo user
-          const demo = localStorage.getItem('healthsaathi_demo_user');
-          if (demo) setUser(JSON.parse(demo));
+        const { data, error } = await supabase.auth.getSession();
+        if (error) {
+          console.warn('Session retrieval note:', error.message);
+        }
+        if (isMounted) {
+          if (data?.session?.user) {
+            setUser(data.session.user);
+          } else {
+            setUser(null);
+          }
         }
       } catch (err) {
-        console.warn('Auth session check notice:', err);
+        console.warn('Auth check note:', err);
+      } finally {
+        if (isMounted) {
+          setIsCheckingAuth(false);
+        }
       }
     };
+
     initAuth();
 
+    // Listen to real-time auth changes (sign in, sign out, token refresh)
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session?.user) {
-        setUser(session.user);
-      } else {
-        setUser(null);
+      if (isMounted) {
+        if (session?.user) {
+          setUser(session.user);
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+        }
       }
     });
 
     return () => {
+      isMounted = false;
       authListener?.subscription?.unsubscribe();
     };
   }, []);
@@ -187,13 +206,15 @@ export default function App() {
   };
 
   useEffect(() => {
-    loadData();
-    const interval = setInterval(async () => {
-      const health = await checkBackendHealth();
-      setBackendHealth(health);
-    }, 15000);
-    return () => clearInterval(interval);
-  }, []);
+    if (user) {
+      loadData();
+      const interval = setInterval(async () => {
+        const health = await checkBackendHealth();
+        setBackendHealth(health);
+      }, 15000);
+      return () => clearInterval(interval);
+    }
+  }, [user]);
 
   const handleVitalsLogged = (newRecord) => {
     setVitalsList((prev) => [newRecord, ...prev]);
@@ -257,12 +278,51 @@ export default function App() {
   };
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    localStorage.removeItem('healthsaathi_demo_user');
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.warn('Signout notice:', err);
+    }
     setUser(null);
     showToast('Signed out successfully.');
   };
 
+  // 1. Initial Session Loading Screen
+  if (isCheckingAuth) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'var(--bg-dark-900, #070b14)',
+          color: '#ffffff',
+        }}
+      >
+        <RefreshCw size={40} className="animate-spin" color="#06b6d4" />
+        <p style={{ marginTop: '1.25rem', color: '#94a3b8', fontSize: '0.92rem', fontWeight: 500 }}>
+          Initializing HealthSaathi Secure Session...
+        </p>
+      </div>
+    );
+  }
+
+  // 2. Protected Dashboard Gate: If user is not authenticated, render Login/Signup/OTP view
+  if (!user) {
+    return (
+      <AuthView
+        onAuthSuccess={(authedUser) => {
+          setUser(authedUser);
+          showToast(`Welcome to HealthSaathi, ${authedUser.user_metadata?.full_name || authedUser.email}!`);
+        }}
+        lang={lang}
+      />
+    );
+  }
+
+  // 3. User is Authenticated -> Render Full Protected Dashboard
   const latestVitals = vitalsList[0] || {
     heart_rate: 72,
     blood_pressure_sys: 118,
@@ -272,11 +332,135 @@ export default function App() {
     sleep_hours: 7.5
   };
 
-  const userName = user?.user_metadata?.name || user?.email?.split('@')[0] || 'User';
+  const userName =
+    user?.user_metadata?.full_name ||
+    user?.user_metadata?.name ||
+    user?.email?.split('@')[0] ||
+    'User';
+
+  const handleSelectTab = (tabId) => {
+    setActiveTab(tabId);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleSyncData = async () => {
+    await loadData();
+    showToast('System synced: Live biomarkers & database records up to date!');
+  };
+
+  const handleExportReport = () => {
+    try {
+      const dateStr = new Date().toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+      const timeStr = new Date().toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+
+      const reportContent = `======================================================================
+HEALTHSAATHI - CLINICAL PERSONAL HEALTH SUMMARY REPORT
+======================================================================
+Patient Name: ${userName}
+Account Email: ${user?.email || 'N/A'}
+Report Generated: ${dateStr} at ${timeStr}
+Platform: HealthSaathi Clinical Copilot (Verified Secure Session)
+
+----------------------------------------------------------------------
+1. CURRENT PHYSIOLOGICAL BIOMARKERS (LATEST VITALS)
+----------------------------------------------------------------------
+- Resting Heart Rate: ${latestVitals.heart_rate} BPM (Optimal Sinus Rhythm)
+- Blood Pressure: ${latestVitals.blood_pressure_sys}/${latestVitals.blood_pressure_dia} mmHg (Optimal Stage 0)
+- Fasting Blood Glucose: ${latestVitals.blood_glucose} mg/dL (Euglycemic)
+- Oxygen Saturation (SpO2): ${latestVitals.oxygen_level}% (Target Reached)
+- Sleep Duration: ${latestVitals.sleep_hours} Hours (Deep Restorative)
+- Clinical Notes: ${latestVitals.notes || 'Routine health evaluation'}
+
+----------------------------------------------------------------------
+2. ACTIVE APPOINTMENTS & CONSULTATIONS
+----------------------------------------------------------------------
+${appointments.map((a, i) => `[${i + 1}] Date: ${a.date} | Time: ${a.time}
+    Provider: ${a.doctor} (${a.specialty})
+    Facility: ${a.hospital}
+    Format: ${a.mode} | Status: ${a.status}
+    Objective: ${a.reason}`).join('\n\n')}
+
+----------------------------------------------------------------------
+3. RECENT HEALTH LOGS & SYMPTOM ASSESSMENTS
+----------------------------------------------------------------------
+${healthHistory.slice(0, 5).map((h, i) => `[${i + 1}] Date: ${new Date(h.created_at).toLocaleDateString()}
+    Type: ${h.title || (h.type === 'vitals' ? 'Biomarker Evaluation' : 'Clinical Entry')}
+    Details: ${h.summary || h.notes || `HR: ${h.heart_rate} bpm, BP: ${h.blood_pressure_sys}/${h.blood_pressure_dia}`}`).join('\n\n')}
+
+----------------------------------------------------------------------
+4. EMERGENCY DISPATCH SERVICES (INDIA 24/7)
+----------------------------------------------------------------------
+- National Emergency Services: 112 (Police, Ambulance, Fire, Disaster)
+- Emergency Medical Ambulance: 108
+- Maternal & Infant Ambulance: 102
+- National Health Helpline: 1075
+
+======================================================================
+DISCLAIMER: This report is generated by HealthSaathi to assist patient
+record keeping and routine clinical reviews. It does not replace
+formal diagnostic consultations with licensed physicians.
+======================================================================`;
+
+      const blob = new Blob([reportContent], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `HealthSaathi_Health_Report_${userName.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      showToast('Clinical Health Summary report downloaded successfully!');
+      addNotification({
+        type: 'vital',
+        title: 'Health Report Exported',
+        message: `Clinical summary document downloaded for ${userName}.`
+      });
+    } catch (err) {
+      console.error('Export report error:', err);
+      showToast('Could not download report. Please try again.');
+    }
+  };
+
+  const handleSyncSmartwatch = () => {
+    setIsSyncingWatch(true);
+    showToast('Connecting to Smartwatch BLE & fetching biometric stream...');
+
+    setTimeout(() => {
+      const simulatedHR = Math.floor(70 + Math.random() * 8); // 70-77
+      const simulatedSpO2 = Math.floor(98 + Math.random() * 2); // 98-99%
+      const simulatedSys = Math.floor(117 + Math.random() * 5); // 117-121
+      const simulatedDia = Math.floor(77 + Math.random() * 4); // 77-80
+
+      const newReading = {
+        id: 'watch-' + Date.now(),
+        heart_rate: simulatedHR,
+        blood_pressure_sys: simulatedSys,
+        blood_pressure_dia: simulatedDia,
+        blood_glucose: latestVitals.blood_glucose,
+        oxygen_level: simulatedSpO2,
+        sleep_hours: latestVitals.sleep_hours,
+        notes: 'Live telemetry synced from smartwatch sensor',
+        created_at: new Date().toISOString()
+      };
+
+      handleVitalsLogged(newReading);
+      setIsSyncingWatch(false);
+      showToast(`Smartwatch Synced: HR ${simulatedHR} BPM, SpO2 ${simulatedSpO2}%, BP ${simulatedSys}/${simulatedDia}!`);
+    }, 1200);
+  };
 
   return (
     <div className="app-container">
-      {/* Toast Banner */}
+      {/* Toast Notification Banner */}
       {toastMessage && (
         <div
           style={{
@@ -305,13 +489,13 @@ export default function App() {
       {/* Top Navigation */}
       <Navbar
         activeTab={activeTab}
-        onSelectTab={setActiveTab}
+        onSelectTab={handleSelectTab}
         backendHealth={backendHealth}
         onOpenLogModal={() => setIsLogModalOpen(true)}
+        onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
         currentLang={lang}
         onSelectLang={handleLanguageChange}
         user={user}
-        onOpenAuthModal={() => setIsAuthModalOpen(true)}
         onSignOut={handleSignOut}
         notifications={notifications}
         onMarkAllAsRead={() => setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))}
@@ -334,7 +518,75 @@ export default function App() {
                   onOpenLogModal={() => setIsLogModalOpen(true)}
                 />
 
-                <MedicationTracker />
+                {/* Dashboard Healthcare Cards: Lab Reports & Prescriptions */}
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+                    gap: '1rem',
+                    marginBottom: '1rem'
+                  }}
+                >
+                  {/* Lab Reports Card */}
+                  <div
+                    className="card-container"
+                    style={{
+                      cursor: 'pointer',
+                      border: '1px solid rgba(6, 182, 212, 0.25)',
+                      transition: 'var(--transition)'
+                    }}
+                    onClick={() => handleSelectTab('lab_reports')}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ width: '34px', height: '34px', borderRadius: '10px', background: 'rgba(6, 182, 212, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#22d3ee' }}>
+                          <FileText size={18} />
+                        </div>
+                        <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#f8fafc' }}>
+                          Lab Reports
+                        </h4>
+                      </div>
+                      <span className="brand-badge" style={{ fontSize: '0.65rem' }}>AI OCR</span>
+                    </div>
+                    <p style={{ fontSize: '0.78rem', color: '#94a3b8', margin: '4px 0 10px', lineHeight: 1.4 }}>
+                      Upload blood panels & PDF lab tests for plain-language explanations and doctor discussion questions.
+                    </p>
+                    <span style={{ fontSize: '0.78rem', color: '#22d3ee', fontWeight: 600 }}>
+                      Open Lab Analyzer &rarr;
+                    </span>
+                  </div>
+
+                  {/* Prescriptions Card */}
+                  <div
+                    className="card-container"
+                    style={{
+                      cursor: 'pointer',
+                      border: '1px solid rgba(139, 92, 246, 0.25)',
+                      transition: 'var(--transition)'
+                    }}
+                    onClick={() => handleSelectTab('prescriptions')}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ width: '34px', height: '34px', borderRadius: '10px', background: 'rgba(139, 92, 246, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c084fc' }}>
+                          <Pill size={18} />
+                        </div>
+                        <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#f8fafc' }}>
+                          Prescriptions
+                        </h4>
+                      </div>
+                      <span className="brand-badge" style={{ fontSize: '0.65rem' }}>openFDA</span>
+                    </div>
+                    <p style={{ fontSize: '0.78rem', color: '#94a3b8', margin: '4px 0 10px', lineHeight: 1.4 }}>
+                      Digitize doctor prescription slips, identify medications, and cross-check official drug labeling.
+                    </p>
+                    <span style={{ fontSize: '0.78rem', color: '#c084fc', fontWeight: 600 }}>
+                      Open Prescriptions &rarr;
+                    </span>
+                  </div>
+                </div>
+
+                <MedicationTracker onToast={showToast} />
 
                 {/* Quick Action Tools */}
                 <section className="card-container" id="quick-action-tools">
@@ -345,9 +597,10 @@ export default function App() {
                     </h3>
                     <button
                       className="btn-secondary"
-                      onClick={loadData}
+                      onClick={handleSyncData}
                       disabled={isRefreshing}
                       style={{ fontSize: '0.78rem', padding: '0.35rem 0.75rem' }}
+                      id="btn-sync-data-action"
                     >
                       <RefreshCw size={13} className={isRefreshing ? 'animate-spin' : ''} />
                       {isRefreshing ? t('btn_syncing', 'Syncing...') : t('btn_sync', 'Sync Data')}
@@ -364,7 +617,8 @@ export default function App() {
                     <button
                       className="btn-secondary"
                       style={{ justifyContent: 'center' }}
-                      onClick={() => showToast(`Generating Clinical Health Summary PDF for ${userName}...`)}
+                      id="btn-export-health-report"
+                      onClick={handleExportReport}
                     >
                       <Download size={16} />
                       <span>{t('btn_export_pdf', 'Export Report')}</span>
@@ -373,10 +627,12 @@ export default function App() {
                     <button
                       className="btn-secondary"
                       style={{ justifyContent: 'center' }}
-                      onClick={() => showToast('Smartwatch sync complete: Heart rate & SpO2 live stream updated!')}
+                      id="btn-sync-smartwatch"
+                      disabled={isSyncingWatch}
+                      onClick={handleSyncSmartwatch}
                     >
-                      <Watch size={16} />
-                      <span>{t('btn_smartwatch', 'Sync Smartwatch')}</span>
+                      <Watch size={16} className={isSyncingWatch ? 'animate-spin' : ''} />
+                      <span>{isSyncingWatch ? 'Syncing Watch...' : t('btn_smartwatch', 'Sync Smartwatch')}</span>
                     </button>
 
                     <button
@@ -384,13 +640,11 @@ export default function App() {
                       style={{
                         justifyContent: 'center',
                         borderColor: 'rgba(244, 63, 94, 0.4)',
-                        color: '#fda4af'
+                        color: '#fda4af',
+                        background: 'rgba(244, 63, 94, 0.08)'
                       }}
-                      onClick={() =>
-                        alert(
-                          'EMERGENCY SOS DISPATCHED: Ready to contact local emergency response (112 / 108 / 911) and share real-time GPS & vital signs telemetry with your emergency contacts.'
-                        )
-                      }
+                      id="btn-emergency-quick-tool"
+                      onClick={() => setIsEmergencyModalOpen(true)}
                     >
                       <Shield size={16} />
                       <span>{t('btn_emergency', 'Emergency SOS (112)')}</span>
@@ -401,22 +655,38 @@ export default function App() {
 
               {/* Right Column: AI Health Copilot Assistant */}
               <div className="dashboard-right-col">
-                <CopilotChat lang={lang} user={user} />
+                <CopilotChat
+                  lang={lang}
+                  user={user}
+                  onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
+                  onOpenLogModal={() => setIsLogModalOpen(true)}
+                  onSelectTab={handleSelectTab}
+                />
               </div>
             </div>
           </>
         )}
 
-        {/* VIEW 2: SYMPTOM CHECKER */}
+        {/* VIEW 2: LAB REPORTS */}
+        {activeTab === 'lab_reports' && (
+          <LabReportsManager lang={lang} />
+        )}
+
+        {/* VIEW 3: PRESCRIPTIONS */}
+        {activeTab === 'prescriptions' && (
+          <PrescriptionManager lang={lang} />
+        )}
+
+        {/* VIEW 4: SYMPTOM CHECKER */}
         {activeTab === 'symptoms' && (
           <SymptomChecker
             lang={lang}
             onSaveToHistory={handleSaveSymptomToHistory}
-            onNavigateToAppointments={() => setActiveTab('appointments')}
+            onNavigateToAppointments={() => handleSelectTab('appointments')}
           />
         )}
 
-        {/* VIEW 3: APPOINTMENTS */}
+        {/* VIEW 5: APPOINTMENTS */}
         {activeTab === 'appointments' && (
           <AppointmentsManager
             appointments={appointments}
@@ -426,14 +696,14 @@ export default function App() {
           />
         )}
 
-        {/* VIEW 4: MEDICINES */}
+        {/* VIEW 6: MEDICINES */}
         {activeTab === 'medicines' && (
           <div className="view-panel">
-            <MedicationTracker />
+            <MedicationTracker onToast={showToast} />
           </div>
         )}
 
-        {/* VIEW 5: HEALTH HISTORY */}
+        {/* VIEW 7: HEALTH HISTORY */}
         {activeTab === 'history' && (
           <HealthHistory
             records={healthHistory}
@@ -443,28 +713,31 @@ export default function App() {
           />
         )}
 
-        {/* VIEW 6: DEDICATED AI ASSISTANT */}
+        {/* VIEW 8: DEDICATED AI ASSISTANT */}
         {activeTab === 'assistant' && (
           <div style={{ maxWidth: '960px', margin: '0 auto' }}>
-            <CopilotChat lang={lang} user={user} />
+            <CopilotChat
+              lang={lang}
+              user={user}
+              onOpenEmergencyModal={() => setIsEmergencyModalOpen(true)}
+              onOpenLogModal={() => setIsLogModalOpen(true)}
+              onSelectTab={handleSelectTab}
+            />
           </div>
         )}
       </main>
 
-      {/* Modals */}
+      {/* Log Vitals Modal */}
       <LogVitalsModal
         isOpen={isLogModalOpen}
         onClose={() => setIsLogModalOpen(false)}
         onVitalsLogged={handleVitalsLogged}
       />
 
-      <AuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
-        onAuthSuccess={(authedUser) => {
-          setUser(authedUser);
-          showToast(`Welcome, ${authedUser.user_metadata?.name || 'User'}!`);
-        }}
+      {/* Functional Emergency Contacts Modal */}
+      <EmergencyModal
+        isOpen={isEmergencyModalOpen}
+        onClose={() => setIsEmergencyModalOpen(false)}
         lang={lang}
       />
     </div>

@@ -4,8 +4,6 @@ import {
   Trash2,
   Activity,
   Stethoscope,
-  Filter,
-  AlertCircle,
   Clock,
   ShieldCheck
 } from 'lucide-react';

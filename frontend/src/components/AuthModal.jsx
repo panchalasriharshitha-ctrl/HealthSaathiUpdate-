@@ -54,7 +54,18 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess, lang = 'en' 
         }
       }
     } catch (err) {
-      setErrorMsg(err.message || 'Authentication failed. Please check credentials.');
+      console.error('AuthModal Error:', {
+        message: err.message,
+        status: err.status,
+        error: err,
+      });
+      if (err.status === 429 || err.message?.toLowerCase().includes('rate limit')) {
+        setErrorMsg('Email rate limit exceeded (429). Please wait a few minutes before trying again.');
+      } else if (err.status === 500 || err.message?.includes('Error sending confirmation email')) {
+        setErrorMsg('Supabase SMTP Error (500): Failed to send email. Custom SMTP configuration is required in Supabase Dashboard.');
+      } else {
+        setErrorMsg(err.message || 'Authentication failed. Please check credentials.');
+      }
     } finally {
       setLoading(false);
     }

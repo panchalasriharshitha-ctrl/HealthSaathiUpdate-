@@ -1,1 +1,1 @@
-# MediMate AI backend package
+# HealthSaathi backend package

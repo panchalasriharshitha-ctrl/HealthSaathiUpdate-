@@ -68,14 +68,14 @@ export async function logNewVitals(vitalsData) {
 }
 
 /**
- * Send inquiry to HealthSaathi AI Copilot (supports Gemini + multilingual)
+ * Send inquiry to HealthSaathi Copilot (OpenAI + Clinical Triage)
  */
-export async function sendCopilotMessage(message, lang = 'en', userId = 'guest_patient') {
+export async function sendCopilotMessage(message, lang = 'en', userId = 'guest_patient', history = []) {
   try {
     const res = await fetch(`${API_BASE_URL}/copilot/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, lang, user_id: userId }),
+      body: JSON.stringify({ message, lang, user_id: userId, history }),
     });
     if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
     return await res.json();
@@ -90,8 +90,78 @@ export async function sendCopilotMessage(message, lang = 'en', userId = 'guest_p
       reply: fallbackReply,
       category: 'general_wellness',
       suggested_actions: ['Hydrate adequately', 'Record resting vitals', 'Schedule clinical checkup'],
-      disclaimer: 'HealthSaathi AI operates as a supportive health copilot, not emergency medical personnel.',
-      provider: 'client_fallback'
+      disclaimer: 'HealthSaathi operates as an informational health copilot, not emergency medical personnel.',
+      provider: 'client_fallback',
+      error_message: error.message
+    };
+  }
+}
+
+/**
+ * Upload and analyze Lab Report (PDF / JPG / PNG)
+ */
+export async function uploadAndAnalyzeLabReport(file, lang = 'en') {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('lang', lang);
+
+  const res = await fetch(`${API_BASE_URL}/reports/analyze`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  const data = await res.json();
+  if (!res.ok || data.success === false) {
+    const error = new Error(data.message || `Upload failed with status ${res.status}`);
+    error.data = data;
+    error.errorType = data.error;
+    error.preview = data.extracted_text_preview;
+    error.suggestion = data.suggestion;
+    throw error;
+  }
+  return data;
+}
+
+/**
+ * Upload and parse Prescription (PDF / JPG / PNG)
+ */
+export async function uploadAndAnalyzePrescription(file, lang = 'en') {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('lang', lang);
+
+  const res = await fetch(`${API_BASE_URL}/prescriptions/analyze`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  const data = await res.json();
+  if (!res.ok || data.success === false) {
+    const error = new Error(data.message || `Upload failed with status ${res.status}`);
+    error.data = data;
+    error.errorType = data.error;
+    error.preview = data.extracted_text_preview;
+    error.suggestion = data.suggestion;
+    throw error;
+  }
+  return data;
+}
+
+/**
+ * Fetch openFDA official medication labeling info
+ */
+export async function fetchDrugInfo(drugName) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/openfda/info?drug=${encodeURIComponent(drugName)}`);
+    if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    return {
+      success: false,
+      brand_name: drugName,
+      purpose: 'Prescription medication as prescribed by doctor.',
+      warnings: 'Consult prescribing physician and dispensing pharmacist.',
+      disclaimer: 'Direct lookup unavailable.'
     };
   }
 }

@@ -82,3 +82,61 @@ CREATE POLICY "Users can delete own appointments"
 -- Create index for performance
 CREATE INDEX IF NOT EXISTS idx_health_records_user ON public.health_records(user_id);
 CREATE INDEX IF NOT EXISTS idx_appointments_user ON public.appointments(user_id);
+
+-- 4. Lab Reports Table (With Strict Row Level Security)
+CREATE TABLE IF NOT EXISTS public.lab_reports (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+    file_name VARCHAR(255) NOT NULL,
+    laboratory_name VARCHAR(255),
+    report_date DATE,
+    test_category VARCHAR(150),
+    report_data JSONB NOT NULL,
+    summary TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.lab_reports ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own lab reports" 
+    ON public.lab_reports FOR SELECT 
+    USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own lab reports" 
+    ON public.lab_reports FOR INSERT 
+    WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own lab reports" 
+    ON public.lab_reports FOR DELETE 
+    USING (auth.uid() = user_id);
+
+CREATE INDEX IF NOT EXISTS idx_lab_reports_user ON public.lab_reports(user_id);
+
+-- 5. Prescriptions Table (With Strict Row Level Security)
+CREATE TABLE IF NOT EXISTS public.prescriptions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+    file_name VARCHAR(255) NOT NULL,
+    doctor_name VARCHAR(200),
+    clinic_or_hospital VARCHAR(255),
+    prescription_date DATE,
+    medicines JSONB NOT NULL,
+    doctor_notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.prescriptions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own prescriptions" 
+    ON public.prescriptions FOR SELECT 
+    USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own prescriptions" 
+    ON public.prescriptions FOR INSERT 
+    WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own prescriptions" 
+    ON public.prescriptions FOR DELETE 
+    USING (auth.uid() = user_id);
+
+CREATE INDEX IF NOT EXISTS idx_prescriptions_user ON public.prescriptions(user_id);

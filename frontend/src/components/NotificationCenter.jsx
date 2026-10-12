@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bell, CheckCheck, Trash2, Calendar, Activity, Pill, AlertTriangle } from 'lucide-react';
+import { Bell, CheckCheck, Trash2, Calendar, Activity, Pill, AlertTriangle, X } from 'lucide-react';
 import { getTranslation } from '../utils/translations';
 
 export default function NotificationCenter({
@@ -34,7 +34,7 @@ export default function NotificationCenter({
     <div className="notif-dropdown" id="notification-center-dropdown">
       <div className="notif-header">
         <h4>{t('notifications_title', 'Notifications & Alerts')}</h4>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
           {notifications.length > 0 && (
             <>
               <button
@@ -55,6 +55,15 @@ export default function NotificationCenter({
               </button>
             </>
           )}
+          <button
+            className="btn-secondary"
+            style={{ padding: '0.2rem 0.45rem', fontSize: '0.72rem', marginLeft: '4px' }}
+            onClick={onClose}
+            title="Close notifications"
+            aria-label="Close notifications"
+          >
+            <X size={13} />
+          </button>
         </div>
       </div>
 

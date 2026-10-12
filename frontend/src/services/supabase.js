@@ -1,94 +1,149 @@
-// HealthSaathi AI - Supabase Client & Authentication Service
+// HealthSaathi - Supabase Client & Authentication Service
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+// Read from Vite environment variables, with optional local override for testing
+const ENV_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const ENV_SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
+const LOCAL_OVERRIDE_URL = typeof window !== 'undefined' ? localStorage.getItem('healthsaathi_supabase_url') || localStorage.getItem('medimate_supabase_url') || '' : '';
+const LOCAL_OVERRIDE_KEY = typeof window !== 'undefined' ? localStorage.getItem('healthsaathi_supabase_anon_key') || localStorage.getItem('medimate_supabase_anon_key') || '' : '';
+
+export const SUPABASE_URL = (ENV_SUPABASE_URL || LOCAL_OVERRIDE_URL).trim();
+export const SUPABASE_ANON_KEY = (ENV_SUPABASE_ANON_KEY || LOCAL_OVERRIDE_KEY).trim();
 
 export const isSupabaseConfigured = Boolean(
   SUPABASE_URL && 
   SUPABASE_ANON_KEY && 
-  SUPABASE_URL !== 'https://your-project.supabase.co'
+  !SUPABASE_URL.includes('your-project.supabase.co') &&
+  !SUPABASE_ANON_KEY.includes('your_supabase_anon')
 );
 
-let supabaseInstance = null;
-
-if (isSupabaseConfigured) {
-  try {
-    supabaseInstance = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-      },
-    });
-  } catch (err) {
-    console.warn('Could not initialize Supabase client:', err.message);
+if (typeof window !== 'undefined') {
+  if (!ENV_SUPABASE_URL) {
+    console.warn('⚠️ [HealthSaathi Supabase] VITE_SUPABASE_URL is undefined or empty in frontend/.env');
+  }
+  if (!ENV_SUPABASE_ANON_KEY) {
+    console.warn('⚠️ [HealthSaathi Supabase] VITE_SUPABASE_ANON_KEY is undefined or empty in frontend/.env');
   }
 }
 
-// Fallback local session storage key for Demo/Guest mode
-const LOCAL_USER_KEY = 'healthsaathi_demo_user';
+let supabaseClient = null;
 
-export const supabase = supabaseInstance || {
+if (isSupabaseConfigured) {
+  try {
+    supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
+    });
+    if (typeof window !== 'undefined') {
+      console.info('[HealthSaathi Supabase Client] Initialized singleton:', {
+        url: SUPABASE_URL,
+        hasAnonKey: Boolean(SUPABASE_ANON_KEY),
+        keyLength: SUPABASE_ANON_KEY?.length || 0,
+      });
+    }
+  } catch (err) {
+    console.error('Failed to initialize Supabase client:', err);
+  }
+} else if (typeof window !== 'undefined') {
+  console.warn('[HealthSaathi Supabase Client] Missing or invalid credentials in frontend/.env');
+}
+
+/**
+ * Diagnostic helper to ping Supabase Auth service
+ */
+export async function testSupabaseConnection() {
+  if (!isSupabaseConfigured) {
+    return { ok: false, error: 'Supabase credentials missing in frontend/.env' };
+  }
+  try {
+    const { error } = await supabase.auth.getSession();
+    if (error) {
+      return { ok: false, error: error.message, status: error.status };
+    }
+    return { ok: true, endpoint: SUPABASE_URL };
+  } catch (err) {
+    return { ok: false, error: err.message, status: err?.status };
+  }
+}
+
+// Fallback error wrapper if Supabase credentials are missing
+export const supabase = supabaseClient || {
   auth: {
     async getSession() {
-      const stored = localStorage.getItem(LOCAL_USER_KEY);
-      if (stored) {
-        try {
-          const user = JSON.parse(stored);
-          return { data: { session: { user } }, error: null };
-        } catch {
-          return { data: { session: null }, error: null };
-        }
-      }
       return { data: { session: null }, error: null };
     },
-
-    async signInWithPassword({ email, password }) {
-      if (!email || !password) {
-        return { data: null, error: { message: 'Please provide both email and password' } };
-      }
-      const user = {
-        id: 'user_' + Math.random().toString(36).substring(2, 9),
-        email,
-        user_metadata: { name: email.split('@')[0] },
+    async signUp() {
+      return { 
+        data: null, 
+        error: new Error('Supabase is not configured yet. Please provide your Supabase URL and Anon Key in frontend/.env.') 
       };
-      localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(user));
-      return { data: { user, session: { user } }, error: null };
     },
-
-    async signUp({ email, password, options }) {
-      if (!email || !password) {
-        return { data: null, error: { message: 'Please provide both email and password' } };
-      }
-      const user = {
-        id: 'user_' + Math.random().toString(36).substring(2, 9),
-        email,
-        user_metadata: options?.data || { name: email.split('@')[0] },
+    async signInWithPassword() {
+      return { 
+        data: null, 
+        error: new Error('Supabase is not configured yet. Please provide your Supabase URL and Anon Key in frontend/.env.') 
       };
-      localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(user));
-      return { data: { user, session: { user } }, error: null };
     },
-
+    async verifyOtp() {
+      return { 
+        data: null, 
+        error: new Error('Supabase is not configured yet. Please provide your Supabase URL and Anon Key in frontend/.env.') 
+      };
+    },
+    async resend() {
+      return { 
+        data: null, 
+        error: new Error('Supabase is not configured yet. Please provide your Supabase URL and Anon Key in frontend/.env.') 
+      };
+    },
+    async resetPasswordForEmail() {
+      return { 
+        data: null, 
+        error: new Error('Supabase is not configured yet. Please provide your Supabase URL and Anon Key in frontend/.env.') 
+      };
+    },
+    async updateUser() {
+      return { 
+        data: null, 
+        error: new Error('Supabase is not configured yet. Please provide your Supabase URL and Anon Key in frontend/.env.') 
+      };
+    },
     async signOut() {
-      localStorage.removeItem(LOCAL_USER_KEY);
       return { error: null };
     },
-
-    onAuthStateChange(callback) {
-      // Local broadcast trigger
-      const handler = () => {
-        const stored = localStorage.getItem(LOCAL_USER_KEY);
-        const user = stored ? JSON.parse(stored) : null;
-        callback(user ? 'SIGNED_IN' : 'SIGNED_OUT', user ? { user } : null);
-      };
-      window.addEventListener('storage', handler);
+    onAuthStateChange() {
       return {
         data: {
           subscription: {
-            unsubscribe: () => window.removeEventListener('storage', handler),
+            unsubscribe: () => {},
           },
         },
       };
     },
   },
 };
+
+/**
+ * Configure or update local Supabase credentials (runtime helper)
+ */
+export function setRuntimeSupabaseConfig(url, anonKey) {
+  if (url && anonKey) {
+    localStorage.setItem('healthsaathi_supabase_url', url.trim());
+    localStorage.setItem('healthsaathi_supabase_anon_key', anonKey.trim());
+    localStorage.removeItem('medimate_supabase_url');
+    localStorage.removeItem('medimate_supabase_anon_key');
+    window.location.reload();
+  }
+}
+
+export function clearRuntimeSupabaseConfig() {
+  localStorage.removeItem('healthsaathi_supabase_url');
+  localStorage.removeItem('healthsaathi_supabase_anon_key');
+  localStorage.removeItem('medimate_supabase_url');
+  localStorage.removeItem('medimate_supabase_anon_key');
+  window.location.reload();
+}

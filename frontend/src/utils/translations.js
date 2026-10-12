@@ -2,18 +2,28 @@
 
 export const translations = {
   en: {
-    brand_title: "HealthSaathi AI",
-    brand_subtitle: "Your AI Health Companion",
+    brand_title: "HealthSaathi",
+    brand_subtitle: "Intelligent Personal Health Copilot",
     nav_dashboard: "Dashboard",
+    nav_lab_reports: "Lab Reports",
+    nav_prescriptions: "Prescriptions",
     nav_symptoms: "Symptom Checker",
     nav_appointments: "Appointments",
-    nav_medicines: "Medicines",
+    nav_medicines: "Medications",
     nav_history: "Health History",
     nav_assistant: "AI Assistant",
     nav_log_vitals: "+ Log Vitals",
     nav_sign_in: "Sign In",
     nav_sign_out: "Sign Out",
     nav_guest: "Guest Patient",
+
+    // Lab Reports & Prescriptions
+    lab_reports_title: "Clinical Diagnostic Lab Reports",
+    lab_reports_subtitle: "Upload blood tests, metabolic panels & pathology reports for plain-language explanations.",
+    prescriptions_title: "Prescription Reader & Medication Guidance",
+    prescriptions_subtitle: "Digitize prescription slips, identify medicines, and inspect official drug labeling.",
+    emergency_modal_title: "Emergency Contacts & Services",
+    emergency_modal_subtitle: "Immediate 24/7 National Emergency Telephony (India)",
     
     // Status
     backend_connected: "System Online (SQLite)",
@@ -123,9 +133,11 @@ export const translations = {
   },
   
   te: {
-    brand_title: "హెల్త్ సాథి AI",
+    brand_title: "హెల్త్ సాథి",
     brand_subtitle: "మీ వ్యక్తిగత ఆరోగ్య సహాయకుడు",
     nav_dashboard: "డ్యాష్‌బోర్డ్",
+    nav_lab_reports: "ల్యాబ్ రిపోర్టులు",
+    nav_prescriptions: "ప్రిస్క్రిప్షన్లు",
     nav_symptoms: "లక్షణాల తనిఖీ",
     nav_appointments: "వైద్యుల అపాయింట్‌మెంట్లు",
     nav_medicines: "మందుల పట్టిక",
@@ -135,6 +147,14 @@ export const translations = {
     nav_sign_in: "లాగిన్",
     nav_sign_out: "లాగౌట్",
     nav_guest: "గెస్ట్ రోగి",
+
+    // Lab Reports & Prescriptions
+    lab_reports_title: "క్లినికల్ ల్యాబ్ రిపోర్టులు",
+    lab_reports_subtitle: "సులభమైన వివరణల కోసం రక్త పరీక్షలు మరియు ల్యాబ్ నివేదికలను అప్‌లోడ్ చేయండి.",
+    prescriptions_title: "ప్రిస్క్రిప్షన్ వివరాలు & మందుల సమాచారం",
+    prescriptions_subtitle: "ప్రిస్క్రిప్షన్ వివరాలను గుర్తించి, మందుల వేళలను పరిశీలించండి.",
+    emergency_modal_title: "అత్యవసర సంప్రదింపులు & సేవలు",
+    emergency_modal_subtitle: "తక్షణ 24/7 జాతీయ అత్యవసర హెల్ప్‌లైన్ (భారతదేశం)",
     
     // Status
     backend_connected: "వ్యవస్థ ఆన్‌లైన్ (SQLite)",
@@ -244,9 +264,11 @@ export const translations = {
   },
   
   hi: {
-    brand_title: "हेल्थ साथी AI",
+    brand_title: "हेल्थ साथी",
     brand_subtitle: "आपका व्यक्तिगत AI स्वास्थ्य साथी",
     nav_dashboard: "डैशबोर्ड",
+    nav_lab_reports: "लैब रिपोर्ट्स",
+    nav_prescriptions: "नुस्खे (Prescriptions)",
     nav_symptoms: "लक्षण जांच",
     nav_appointments: "डॉक्टर अपॉइंटमेंट",
     nav_medicines: "दवाइयां",
@@ -256,6 +278,14 @@ export const translations = {
     nav_sign_in: "लॉग इन",
     nav_sign_out: "लॉग आउट",
     nav_guest: "अतिथि मरीज",
+
+    // Lab Reports & Prescriptions
+    lab_reports_title: "क्लिनिकल लैब टेस्ट रिपोर्ट्स",
+    lab_reports_subtitle: "सरल भाषा में विश्लेषण के लिए अपनी लैब रिपोर्ट और रक्त परीक्षण अपलोड करें।",
+    prescriptions_title: "प्रिस्क्रिप्शन वाचक और दवा मार्गदर्शन",
+    prescriptions_subtitle: "डॉक्टर के पर्चे को पढ़ें और दवाओं की सही जानकारी प्राप्त करें।",
+    emergency_modal_title: "आपातकालीन संपर्क और सेवाएं",
+    emergency_modal_subtitle: "तत्काल 24/7 राष्ट्रीय आपातकालीन टेलीफोनी (भारत)",
     
     // Status
     backend_connected: "सिस्टम ऑनलाइन (SQLite)",
