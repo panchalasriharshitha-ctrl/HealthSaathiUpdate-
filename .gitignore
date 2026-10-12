@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+
+# Production Builds
+dist/
+dist-ssr/
+build/
+.vercel/
+
+# Environment Variables & Secrets (NEVER push private secrets to public repositories)
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Databases & local logs
+*.db
+*.sqlite
+*.sqlite3
+logs/
+*.log
+
+# System & IDE files
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
